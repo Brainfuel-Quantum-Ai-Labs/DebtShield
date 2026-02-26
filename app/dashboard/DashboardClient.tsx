@@ -126,7 +126,7 @@ export default function DashboardClient({ initialMetrics, initialScore }: Props)
               <p className="text-sm text-blue-300 font-medium">Factors:</p>
               <ul className="space-y-1">
                 {score.reasons.map((reason: string, i: number) => (
-                  <li key={i} className="text-sm text-blue-200 flex items-start gap-2">
+                  <li key={`${reason}-${i}`} className="text-sm text-blue-200 flex items-start gap-2">
                     <span className="text-yellow-400 mt-0.5">⚠</span> {reason}
                   </li>
                 ))}

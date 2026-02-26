@@ -16,7 +16,9 @@ export async function createSupabaseServerClient() {
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options)
             })
-          } catch {}
+          } catch {
+            // Cookie setting may fail in middleware or read-only contexts; safe to ignore
+          }
         },
       },
     }
