@@ -12,7 +12,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.98.0",
-    "next": "14.2.35",
+    "next": "^15.5.12",
     "plaid": "^41.3.0",
     "react": "^18",
     "react-dom": "^18",
@@ -23,7 +23,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
-    "eslint-config-next": "14.2.35",
+    "eslint-config-next": "^15.5.12",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
