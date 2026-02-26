@@ -5,15 +5,13 @@ interface RateLimitEntry {
 
 const store = new Map<string, RateLimitEntry>()
 
-// Periodically clean up expired entries to prevent unbounded memory growth
-setInterval(() => {
-  const now = Date.now()
+function cleanupExpired(now: number) {
   store.forEach((entry, key) => {
     if (now > entry.resetAt) {
       store.delete(key)
     }
   })
-}, 60_000)
+}
 
 /**
  * Simple in-memory rate limiter for MVP use.
@@ -24,6 +22,8 @@ setInterval(() => {
  */
 export function checkRateLimit(key: string, limit = 10, windowMs = 60_000): boolean {
   const now = Date.now()
+  // Clean up expired entries on demand to prevent unbounded memory growth
+  if (store.size > 1000) cleanupExpired(now)
   const entry = store.get(key)
 
   if (!entry || now > entry.resetAt) {

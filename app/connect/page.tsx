@@ -10,8 +10,10 @@ export default function ConnectPage() {
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [status, setStatus] = useState<string>('')
+  const [fetchAttempt, setFetchAttempt] = useState(0)
 
   useEffect(() => {
+    setLinkToken(null)
     fetch('/api/plaid/link-token', { method: 'POST' })
       .then((res) => res.json())
       .then((data) => {
@@ -22,7 +24,7 @@ export default function ConnectPage() {
         }
       })
       .catch(() => setError('Failed to initialize bank connection'))
-  }, [])
+  }, [fetchAttempt])
 
   const onSuccess = useCallback<PlaidLinkOnSuccess>(
     async (publicToken, metadata) => {
@@ -79,7 +81,7 @@ export default function ConnectPage() {
           <div className="text-4xl mb-4">⚠️</div>
           <p className="text-red-300 mb-4">{error}</p>
           <button
-            onClick={() => { setError(null); window.location.reload() }}
+            onClick={() => { setError(null); setFetchAttempt((n) => n + 1) }}
             className="bg-blue-500 hover:bg-blue-400 px-6 py-2 rounded-lg text-white"
           >
             Try Again
