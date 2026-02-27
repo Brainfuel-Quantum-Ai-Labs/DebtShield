@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/admin/backfill-metrics",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

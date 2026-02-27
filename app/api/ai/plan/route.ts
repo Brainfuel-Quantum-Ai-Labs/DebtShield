@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
+import { computeMetrics, toFinancialMetricsFromRow } from '@/lib/finance/metrics'
+import { computeScore } from '@/lib/finance/scoring'
 import { sanitizeForLLM } from '@/lib/finance/sanitize'
 import { anthropicClient, ANTHROPIC_MODEL } from '@/lib/anthropic'
 import { checkRateLimit } from '@/lib/rateLimit'
@@ -12,15 +14,35 @@ interface AIPlan {
   disclaimers: string[]
 }
 
+function normalizeBand(value: unknown): 'Excellent' | 'Good' | 'Warning' | 'Critical' {
+  if (value === 'Excellent' || value === 'Good' || value === 'Warning' || value === 'Critical') {
+    return value
+  }
+  return 'Warning'
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+}
+
+function extractJsonPayload(text: string): string {
+  const trimmed = text.trim()
+  if (trimmed.startsWith('```')) {
+    const withoutOpen = trimmed.replace(/^```(?:json)?\s*/i, '')
+    return withoutOpen.replace(/\s*```$/, '').trim()
+  }
+  return trimmed
+}
+
 function validatePlanShape(obj: unknown): obj is AIPlan {
   if (typeof obj !== 'object' || obj === null) return false
   const plan = obj as Record<string, unknown>
   return (
     typeof plan.overview === 'string' &&
-    Array.isArray(plan.top_risks) &&
-    Array.isArray(plan.weekly_actions) &&
-    Array.isArray(plan.monthly_targets) &&
-    Array.isArray(plan.disclaimers)
+    isStringArray(plan.top_risks) &&
+    isStringArray(plan.weekly_actions) &&
+    isStringArray(plan.monthly_targets) &&
+    isStringArray(plan.disclaimers)
   )
 }
 
@@ -38,13 +60,17 @@ export async function POST() {
 
   const serviceClient = createSupabaseServiceClient()
 
-  const [{ data: metricsRows }, { data: scoreRows }] = await Promise.all([
+  const [{ data: metricsRows, error: metricsError }, { data: transactions, error: txError }, { data: scoreRows, error: scoreError }] = await Promise.all([
     serviceClient
       .from('metrics')
       .select('*')
       .eq('user_id', user.id)
       .order('computed_at', { ascending: false })
       .limit(1),
+    serviceClient
+      .from('transactions')
+      .select('amount, date, name, category, pending')
+      .eq('user_id', user.id),
     serviceClient
       .from('scores')
       .select('*')
@@ -53,14 +79,21 @@ export async function POST() {
       .limit(1),
   ])
 
-  if (!metricsRows?.length || !scoreRows?.length) {
-    return NextResponse.json(
-      { error: 'Missing metrics or score. Please compute metrics and score first.' },
-      { status: 400 }
-    )
+  if (metricsError || txError || scoreError) {
+    console.error('Failed to fetch metrics/transactions/score for plan:', { metricsError, txError, scoreError })
+    return NextResponse.json({ error: 'Failed to fetch financial inputs for plan' }, { status: 500 })
   }
 
-  const summary = sanitizeForLLM(metricsRows[0], scoreRows[0])
+  const metrics = metricsRows?.[0]
+    ? (toFinancialMetricsFromRow(metricsRows[0]) ?? computeMetrics(transactions ?? []))
+    : computeMetrics(transactions ?? [])
+  const score = scoreRows?.[0] ? {
+    score: scoreRows[0].score,
+    band: normalizeBand(scoreRows[0].band),
+    reasons: Array.isArray(scoreRows[0].reasons) ? scoreRows[0].reasons : [],
+  } : computeScore(metrics)
+
+  const summary = sanitizeForLLM(metrics, score)
 
   const prompt = `You are a professional financial advisor AI. Based on the following anonymized financial summary, produce a personalized financial plan.
 
@@ -76,22 +109,33 @@ Respond ONLY with valid JSON (no markdown, no code blocks) in exactly this shape
   "disclaimers": ["array of 2-3 standard financial advice disclaimers"]
 }`
 
-  const message = await anthropicClient.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
-  })
+  let responseText = ''
+  try {
+    const message = await anthropicClient.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    })
 
-  const content = message.content[0]
-  if (content.type !== 'text') {
+    responseText = message.content
+      .filter((entry) => entry.type === 'text')
+      .map((entry) => entry.text)
+      .join('\n')
+      .trim()
+  } catch (err) {
+    console.error('Anthropic request failed:', err)
+    return NextResponse.json({ error: 'Failed to generate AI plan' }, { status: 500 })
+  }
+
+  if (!responseText) {
     return NextResponse.json({ error: 'Unexpected response from AI' }, { status: 500 })
   }
 
   let plan: unknown
   try {
-    plan = JSON.parse(content.text)
+    plan = JSON.parse(extractJsonPayload(responseText))
   } catch {
-    console.error('Failed to parse AI response:', content.text)
+    console.error('Failed to parse AI response:', responseText)
     return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 })
   }
 

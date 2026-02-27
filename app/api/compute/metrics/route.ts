@@ -15,27 +15,47 @@ export async function POST() {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
 
-  const serviceClient = createSupabaseServiceClient()
-  const { data: transactions, error: txError } = await serviceClient
-    .from('transactions')
-    .select('amount, date, name, category, pending')
-    .eq('user_id', user.id)
+  try {
+    const serviceClient = createSupabaseServiceClient()
+    const { data: transactions, error: txError } = await serviceClient
+      .from('transactions')
+      .select('amount, date, name, category, pending')
+      .eq('user_id', user.id)
 
-  if (txError) {
-    return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 })
+    if (txError) {
+      console.error('Failed to fetch transactions:', txError)
+      return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 })
+    }
+
+    const metrics = computeMetrics(transactions ?? [])
+
+    const { error: insertError } = await serviceClient.from('metrics').insert({
+      user_id: user.id,
+      period_start: metrics.period_start,
+      period_end: metrics.period_end,
+      income: metrics.income,
+      expenses: metrics.expenses,
+      cashflow: metrics.cashflow,
+      savings_rate: metrics.savings_rate,
+      transaction_count: metrics.transaction_count,
+      income_sources: metrics.income_sources,
+      expense_categories: metrics.expense_categories,
+      investments: metrics.investments,
+      credit_cards: metrics.credit_cards,
+      loans: metrics.loans,
+      emergency_fund: metrics.emergency_fund,
+      financial_services: metrics.financial_services,
+      intelligence: metrics.intelligence,
+    })
+
+    if (insertError) {
+      console.error('Failed to save metrics:', insertError)
+      return NextResponse.json({ error: 'Failed to save metrics' }, { status: 500 })
+    }
+
+    return NextResponse.json({ metrics })
+  } catch (err) {
+    console.error('compute metrics error:', err)
+    return NextResponse.json({ error: 'Failed to compute metrics' }, { status: 500 })
   }
-
-  const metrics = computeMetrics(transactions ?? [])
-
-  const { error: insertError } = await serviceClient.from('metrics').insert({
-    user_id: user.id,
-    ...metrics,
-  })
-
-  if (insertError) {
-    console.error('Failed to save metrics:', insertError)
-    return NextResponse.json({ error: 'Failed to save metrics' }, { status: 500 })
-  }
-
-  return NextResponse.json({ metrics })
 }

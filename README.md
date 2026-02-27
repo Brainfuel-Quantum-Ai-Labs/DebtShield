@@ -48,6 +48,9 @@ Required variables:
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `ANTHROPIC_MODEL` | Model name (default: `claude-3-5-sonnet-latest`) |
 | `NEXT_PUBLIC_APP_URL` | App base URL (e.g., `http://localhost:3000`) |
+| `BACKFILL_ADMIN_KEY` | Secret key required for admin backfill endpoint |
+| `CRON_SECRET` | Secret used by scheduled cron requests (Bearer token) |
+| `BACKFILL_LOCK_TTL_MINUTES` | Optional lock expiration window for overlap protection (default: `30`) |
 
 ### 3. Database Setup
 
@@ -109,3 +112,51 @@ db/
 ## Disclaimer
 
 This application is for informational purposes only and does not constitute financial advice.
+
+## Backfill Advanced Metrics (One-Time)
+
+After deploying the upgraded schema, you can backfill advanced tab data for existing users with transactions.
+
+1. Set `BACKFILL_ADMIN_KEY` in your environment.
+2. Run your app (`npm run dev` or deployed environment).
+3. Trigger the admin endpoint:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/backfill-metrics \
+  -H "Content-Type: application/json" \
+  -H "x-admin-key: $BACKFILL_ADMIN_KEY" \
+  -d '{"dry_run": false}'
+```
+
+Optional test mode:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/backfill-metrics \
+  -H "Content-Type: application/json" \
+  -H "x-admin-key: $BACKFILL_ADMIN_KEY" \
+  -d '{"dry_run": true, "max_users": 10}'
+```
+
+## Scheduled Backfill (Vercel Cron)
+
+This repository includes [vercel.json](vercel.json) with a daily cron schedule:
+
+- Path: `/api/admin/backfill-metrics`
+- Schedule: `0 3 * * *` (03:00 UTC daily)
+
+To enable securely:
+
+1. Set `CRON_SECRET` in Vercel project environment variables.
+2. Keep the route deployed as-is (it accepts `Authorization: Bearer <CRON_SECRET>`).
+3. Optional: tune `BACKFILL_LOCK_TTL_MINUTES` to match expected backfill runtime.
+
+Overlap protection:
+
+- The route uses a DB-backed lock (`admin_locks`) so concurrent cron/manual runs return `409` instead of running in parallel.
+
+Manual cron-style test:
+
+```bash
+curl -X GET "http://localhost:3000/api/admin/backfill-metrics?dry_run=true&max_users=10" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```

@@ -15,8 +15,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
 
-  const body = await req.json()
-  const { public_token, institution_name } = body
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const payload = body as { public_token?: unknown; institution_name?: unknown }
+  const public_token = typeof payload.public_token === 'string' ? payload.public_token.trim() : ''
+  const institution_name =
+    typeof payload.institution_name === 'string' && payload.institution_name.trim().length > 0
+      ? payload.institution_name.trim()
+      : null
 
   if (!public_token) {
     return NextResponse.json({ error: 'Missing public_token' }, { status: 400 })

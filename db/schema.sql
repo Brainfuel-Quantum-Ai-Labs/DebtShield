@@ -40,8 +40,25 @@ create table if not exists metrics (
   cashflow numeric not null default 0,
   savings_rate numeric not null default 0,
   transaction_count int not null default 0,
+  income_sources jsonb not null default '[]',
+  expense_categories jsonb not null default '[]',
+  investments jsonb not null default '{}',
+  credit_cards jsonb not null default '{}',
+  loans jsonb not null default '{}',
+  emergency_fund jsonb not null default '{}',
+  financial_services jsonb not null default '{}',
+  intelligence jsonb not null default '{}',
   computed_at timestamptz default now()
 );
+
+alter table metrics add column if not exists income_sources jsonb not null default '[]';
+alter table metrics add column if not exists expense_categories jsonb not null default '[]';
+alter table metrics add column if not exists investments jsonb not null default '{}';
+alter table metrics add column if not exists credit_cards jsonb not null default '{}';
+alter table metrics add column if not exists loans jsonb not null default '{}';
+alter table metrics add column if not exists emergency_fund jsonb not null default '{}';
+alter table metrics add column if not exists financial_services jsonb not null default '{}';
+alter table metrics add column if not exists intelligence jsonb not null default '{}';
 
 -- DebtShield scores
 create table if not exists scores (
@@ -63,6 +80,13 @@ create table if not exists plans (
   monthly_targets jsonb not null default '[]',
   disclaimers jsonb not null default '[]',
   created_at timestamptz default now()
+);
+
+-- Internal admin locks (used by service-role jobs like metrics backfill)
+create table if not exists admin_locks (
+  lock_key text primary key,
+  acquired_at timestamptz not null default now(),
+  expires_at timestamptz not null
 );
 
 -- Row Level Security

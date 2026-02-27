@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
+import { computeMetrics, toFinancialMetricsFromRow } from '@/lib/finance/metrics'
+import { computeScore } from '@/lib/finance/scoring'
 import DashboardClient from './DashboardClient'
 
 export default async function DashboardPage() {
@@ -11,13 +13,17 @@ export default async function DashboardPage() {
 
   const serviceClient = createSupabaseServiceClient()
 
-  const [{ data: metrics }, { data: scores }] = await Promise.all([
+  const [{ data: metricsRows }, { data: transactions }, { data: scores }] = await Promise.all([
     serviceClient
       .from('metrics')
       .select('*')
       .eq('user_id', user.id)
       .order('computed_at', { ascending: false })
       .limit(1),
+    serviceClient
+      .from('transactions')
+      .select('amount, date, name, category, pending')
+      .eq('user_id', user.id),
     serviceClient
       .from('scores')
       .select('*')
@@ -26,8 +32,22 @@ export default async function DashboardPage() {
       .limit(1),
   ])
 
-  const latestMetrics = metrics?.[0] ?? null
-  const latestScore = scores?.[0] ?? null
+  const persistedMetrics = metricsRows?.[0] ? toFinancialMetricsFromRow(metricsRows[0]) : null
+  const latestMetrics = persistedMetrics ?? (transactions?.length ? computeMetrics(transactions) : null)
+  const computedScore = latestMetrics ? computeScore(latestMetrics) : null
+  const rawReasons = scores?.[0]?.reasons
+  const persistedReasons = Array.isArray(rawReasons)
+    ? rawReasons.filter((entry): entry is string => typeof entry === 'string')
+    : null
+
+  const latestScore = computedScore
+    ? {
+        score: typeof scores?.[0]?.score === 'number' ? scores[0].score : computedScore.score,
+        band: typeof scores?.[0]?.band === 'string' ? scores[0].band : computedScore.band,
+        reasons: persistedReasons ?? computedScore.reasons,
+        computed_at: scores?.[0]?.computed_at ?? new Date().toISOString(),
+      }
+    : null
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-900 text-white">
