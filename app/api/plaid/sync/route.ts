@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { plaidClient } from '@/lib/plaid'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { deductCredits, CREDIT_COSTS } from '@/lib/credits'
 
 export async function POST() {
   const supabase = await createSupabaseServerClient()
@@ -13,6 +14,14 @@ export async function POST() {
 
   if (!checkRateLimit(`sync:${user.id}`, 3, 60_000)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
+  const credit = await deductCredits(user.id, 'sync')
+  if (!credit.ok) {
+    return NextResponse.json(
+      { error: 'Insufficient credits', credits_remaining: credit.remaining, credits_needed: credit.cost },
+      { status: 402 },
+    )
   }
 
   try {
@@ -85,7 +94,7 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({ success: true, transactions_added: totalAdded })
+    return NextResponse.json({ success: true, transactions_added: totalAdded, credits_remaining: credit.remaining })
   } catch (err) {
     console.error('sync error:', err)
     return NextResponse.json({ error: 'Failed to sync transactions' }, { status: 500 })

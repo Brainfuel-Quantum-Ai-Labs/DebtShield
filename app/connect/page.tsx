@@ -46,16 +46,19 @@ export default function ConnectPage() {
         setStatus('Syncing transactions...')
         const syncRes = await fetch('/api/plaid/sync', { method: 'POST' })
         const syncData = await syncRes.json()
+        if (syncRes.status === 402) throw new Error(`Not enough credits to sync (need ${syncData.credits_needed}, have ${syncData.credits_remaining}). Go to /billing to top up.`)
         if (!syncRes.ok) throw new Error(syncData.error)
 
         setStatus('Computing metrics...')
         const metricsRes = await fetch('/api/compute/metrics', { method: 'POST' })
         const metricsData = await metricsRes.json()
+        if (metricsRes.status === 402) throw new Error(`Not enough credits to compute metrics. Go to /billing to top up.`)
         if (!metricsRes.ok) throw new Error(metricsData.error)
 
         setStatus('Computing score...')
         const scoreRes = await fetch('/api/compute/score', { method: 'POST' })
         const scoreData = await scoreRes.json()
+        if (scoreRes.status === 402) throw new Error(`Not enough credits to compute score. Go to /billing to top up.`)
         if (!scoreRes.ok) throw new Error(scoreData.error)
 
         setStatus(`Done! Score: ${scoreData.score?.score} (${scoreData.score?.band})`)

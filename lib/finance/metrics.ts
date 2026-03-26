@@ -346,8 +346,13 @@ export function computeMetrics(transactions: Transaction[]): FinancialMetrics {
       incomeSources[source] = (incomeSources[source] ?? 0) + credit
 
       if (isInvestmentActivity(tx) || /dividend|interest/.test(normalized)) {
-        investmentIncome += credit
-        investmentWithdrawals += credit
+        if (/dividend|interest/.test(normalized)) {
+          // Passive income (dividend, interest) — NOT a withdrawal from investments
+          investmentIncome += credit
+        } else {
+          // Selling securities / redeeming investment — money leaving investment account
+          investmentWithdrawals += credit
+        }
       }
     } else {
       // Positive amounts are debits (money going out)

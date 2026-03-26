@@ -102,3 +102,39 @@ create policy "Users can view own transactions" on transactions for select using
 create policy "Users can view own metrics" on metrics for select using (auth.uid() = user_id);
 create policy "Users can view own scores" on scores for select using (auth.uid() = user_id);
 create policy "Users can view own plans" on plans for select using (auth.uid() = user_id);
+
+-- ============================================================
+-- Credits & Usage Tracking (pay-per-use system)
+-- ============================================================
+
+-- One row per user: tracks spendable credit balance
+create table if not exists user_credits (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  credits int not null default 10,
+  lifetime_used int not null default 0,
+  updated_at timestamptz default now()
+);
+
+-- Append-only log of every credit-costing operation
+create table if not exists usage_events (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_type text not null check (event_type in ('ai_plan','sync','score','metrics')),
+  credits_used int not null default 0,
+  created_at timestamptz default now()
+);
+
+-- Performance indexes
+create index if not exists idx_usage_events_user_id on usage_events(user_id);
+create index if not exists idx_usage_events_created_at on usage_events(user_id, created_at desc);
+create index if not exists idx_transactions_user_id on transactions(user_id);
+create index if not exists idx_transactions_date on transactions(user_id, date desc);
+create index if not exists idx_metrics_user_computed on metrics(user_id, computed_at desc);
+create index if not exists idx_scores_user_computed on scores(user_id, computed_at desc);
+create index if not exists idx_plans_user_created on plans(user_id, created_at desc);
+
+alter table user_credits enable row level security;
+alter table usage_events enable row level security;
+
+create policy "Users can view own credits" on user_credits for select using (auth.uid() = user_id);
+create policy "Users can view own usage events" on usage_events for select using (auth.uid() = user_id);

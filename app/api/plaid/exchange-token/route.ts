@@ -38,6 +38,26 @@ export async function POST(req: NextRequest) {
     const { access_token, item_id } = exchangeResponse.data
 
     const serviceClient = createSupabaseServiceClient()
+
+    // Guard against duplicate connections: if this item_id is already stored
+    // for this user, skip the insert and return success to avoid double-counting transactions.
+    const { data: existing, error: lookupError } = await serviceClient
+      .from('plaid_items')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('item_id', item_id)
+      .maybeSingle()
+
+    if (lookupError) {
+      console.error('Failed to check for existing plaid item:', lookupError)
+      return NextResponse.json({ error: 'Failed to verify connection' }, { status: 500 })
+    }
+
+    if (existing) {
+      // Already connected — return success without inserting a duplicate row
+      return NextResponse.json({ success: true, already_connected: true })
+    }
+
     const { error: insertError } = await serviceClient.from('plaid_items').insert({
       user_id: user.id,
       access_token,
