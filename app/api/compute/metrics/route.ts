@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 import { computeMetrics } from '@/lib/finance/metrics'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { deductCredits } from '@/lib/credits'
 
 export async function POST() {
   const supabase = await createSupabaseServerClient()
@@ -13,6 +14,14 @@ export async function POST() {
 
   if (!checkRateLimit(`metrics:${user.id}`, 5, 60_000)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
+  const credit = await deductCredits(user.id, 'metrics')
+  if (!credit.ok) {
+    return NextResponse.json(
+      { error: 'Insufficient credits', credits_remaining: credit.remaining, credits_needed: credit.cost },
+      { status: 402 },
+    )
   }
 
   try {
@@ -67,7 +76,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Failed to save metrics' }, { status: 500 })
     }
 
-    return NextResponse.json({ metrics })
+    return NextResponse.json({ metrics, credits_remaining: credit.remaining })
   } catch (err) {
     console.error('compute metrics error:', err)
     return NextResponse.json({ error: 'Failed to compute metrics' }, { status: 500 })

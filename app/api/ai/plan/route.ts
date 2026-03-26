@@ -5,6 +5,7 @@ import { computeScore } from '@/lib/finance/scoring'
 import { sanitizeForLLM } from '@/lib/finance/sanitize'
 import { anthropicClient, ANTHROPIC_MODEL } from '@/lib/anthropic'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { deductCredits } from '@/lib/credits'
 
 interface AIPlan {
   overview: string
@@ -56,6 +57,14 @@ export async function POST() {
 
   if (!checkRateLimit(`plan:${user.id}`, 3, 300_000)) {
     return NextResponse.json({ error: 'Too many requests. AI plan can be generated at most 3 times per 5 minutes.' }, { status: 429 })
+  }
+
+  const credit = await deductCredits(user.id, 'ai_plan')
+  if (!credit.ok) {
+    return NextResponse.json(
+      { error: 'Insufficient credits', credits_remaining: credit.remaining, credits_needed: credit.cost },
+      { status: 402 },
+    )
   }
 
   const serviceClient = createSupabaseServiceClient()
@@ -157,5 +166,5 @@ Respond ONLY with valid JSON (no markdown, no code blocks) in exactly this shape
     return NextResponse.json({ error: 'Failed to save plan' }, { status: 500 })
   }
 
-  return NextResponse.json({ plan })
+  return NextResponse.json({ plan, credits_remaining: credit.remaining })
 }

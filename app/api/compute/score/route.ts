@@ -3,6 +3,7 @@ import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/s
 import { computeMetrics, toFinancialMetricsFromRow } from '@/lib/finance/metrics'
 import { computeScore } from '@/lib/finance/scoring'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { deductCredits } from '@/lib/credits'
 
 export async function POST() {
   const supabase = await createSupabaseServerClient()
@@ -14,6 +15,14 @@ export async function POST() {
 
   if (!checkRateLimit(`score:${user.id}`, 5, 60_000)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
+  const credit = await deductCredits(user.id, 'score')
+  if (!credit.ok) {
+    return NextResponse.json(
+      { error: 'Insufficient credits', credits_remaining: credit.remaining, credits_needed: credit.cost },
+      { status: 402 },
+    )
   }
 
   try {
@@ -70,7 +79,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Failed to save score' }, { status: 500 })
     }
 
-    return NextResponse.json({ score: result })
+    return NextResponse.json({ score: result, credits_remaining: credit.remaining })
   } catch (err) {
     console.error('compute score error:', err)
     return NextResponse.json({ error: 'Failed to compute score' }, { status: 500 })

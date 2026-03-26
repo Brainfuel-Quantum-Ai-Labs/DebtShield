@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 import { computeMetrics, toFinancialMetricsFromRow } from '@/lib/finance/metrics'
 import { computeScore } from '@/lib/finance/scoring'
+import { getCredits } from '@/lib/credits'
 import DashboardClient from './DashboardClient'
 
 export default async function DashboardPage() {
@@ -32,12 +32,21 @@ export default async function DashboardPage() {
       .limit(1),
   ])
 
+  // Fetch credits separately — auto-initialises to 10 for new users
+  let initialCredits: number | null = null
+  try {
+    initialCredits = await getCredits(user.id)
+  } catch {
+    // Non-fatal — dashboard still works without credits display
+  }
+
   const persistedMetrics = metricsRows?.[0] ? toFinancialMetricsFromRow(metricsRows[0]) : null
   const latestMetrics = persistedMetrics ?? (transactions?.length ? computeMetrics(transactions) : null)
   const computedScore = latestMetrics ? computeScore(latestMetrics) : null
+
   const rawReasons = scores?.[0]?.reasons
   const persistedReasons = Array.isArray(rawReasons)
-    ? rawReasons.filter((entry): entry is string => typeof entry === 'string')
+    ? rawReasons.filter((r): r is string => typeof r === 'string')
     : null
 
   const latestScore = computedScore
@@ -51,17 +60,14 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-900 text-white">
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-white/10">
-        <Link href="/" className="text-xl font-bold">🛡️ DebtShield AI</Link>
-        <div className="flex items-center gap-4">
-          <Link href="/reports" className="text-blue-300 hover:text-white text-sm">Reports</Link>
-          <Link href="/connect" className="text-blue-300 hover:text-white text-sm">+ Connect Bank</Link>
-        </div>
-      </nav>
-
-      <div className="max-w-4xl mx-auto px-8 py-12">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-12">
         <h1 className="text-3xl font-bold mb-8">Your Financial Dashboard</h1>
-        <DashboardClient initialMetrics={latestMetrics} initialScore={latestScore} />
+        <DashboardClient
+          initialMetrics={latestMetrics}
+          initialScore={latestScore}
+          initialCredits={initialCredits}
+          userEmail={user.email ?? null}
+        />
       </div>
     </main>
   )
