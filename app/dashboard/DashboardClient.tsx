@@ -2,85 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import type { FinancialMetrics } from '@/lib/finance/metrics'
+import type { ScoreResult } from '@/lib/finance/scoring'
 
-interface SourceBreakdown {
-  source: string
-  amount: number
-  share: number
-}
-
-interface CategoryBreakdown {
-  category: string
-  amount: number
-  share: number
-}
-
-interface InvestmentSnapshot {
-  contributions: number
-  withdrawals: number
-  net_investing: number
-  income: number
-}
-
-interface CreditCardSnapshot {
-  estimated_card_spend: number
-  estimated_card_payments: number
-  estimated_interest_and_fees: number
-  utilization_risk: 'Low' | 'Moderate' | 'High'
-}
-
-interface LoanSnapshot {
-  estimated_monthly_payments: number
-  loan_payment_ratio: number
-  burden: 'Low' | 'Moderate' | 'High'
-}
-
-interface EmergencyFundSnapshot {
-  essentials_monthly: number
-  estimated_fund: number
-  months_covered: number
-  target_fund: number
-  funding_gap: number
-}
-
-interface FinancialServiceSnapshot {
-  fees: number
-  insurance: number
-  subscriptions: number
-}
-
-interface IntelligenceSnapshot {
-  strengths: string[]
-  risks: string[]
-  opportunities: string[]
-  next_actions: string[]
-}
-
-interface Metrics {
-  income: number
-  expenses: number
-  cashflow: number
-  savings_rate: number
-  transaction_count: number
-  period_start: string
-  period_end: string
-  computed_at?: string
-  income_sources: SourceBreakdown[]
-  expense_categories: CategoryBreakdown[]
-  investments: InvestmentSnapshot
-  credit_cards: CreditCardSnapshot
-  loans: LoanSnapshot
-  emergency_fund: EmergencyFundSnapshot
-  financial_services: FinancialServiceSnapshot
-  intelligence: IntelligenceSnapshot
-}
-
-interface Score {
-  score: number
-  band: string
-  reasons: string[]
-  computed_at: string
-}
+// Extend lib types with DB-persisted timestamp fields
+type Metrics = FinancialMetrics & { computed_at?: string }
+type Score = ScoreResult & { computed_at: string }
 
 interface Props {
   initialMetrics: Metrics | null

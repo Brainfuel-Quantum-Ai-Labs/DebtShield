@@ -29,6 +29,20 @@ export async function POST() {
 
     const metrics = computeMetrics(transactions ?? [])
 
+    // Remove any existing row for this user+period before inserting so that
+    // repeated recomputes never accumulate duplicate rows for the same window.
+    const { error: deleteError } = await serviceClient
+      .from('metrics')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('period_start', metrics.period_start)
+      .eq('period_end', metrics.period_end)
+
+    if (deleteError) {
+      console.error('Failed to clear existing metrics:', deleteError)
+      return NextResponse.json({ error: 'Failed to save metrics' }, { status: 500 })
+    }
+
     const { error: insertError } = await serviceClient.from('metrics').insert({
       user_id: user.id,
       period_start: metrics.period_start,

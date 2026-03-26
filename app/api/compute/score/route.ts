@@ -46,6 +46,18 @@ export async function POST() {
       : computeMetrics(transactions ?? [])
     const result = computeScore(metrics)
 
+    // Remove all previous scores for this user before inserting so that
+    // repeated recomputes never accumulate unbounded rows.
+    const { error: deleteError } = await serviceClient
+      .from('scores')
+      .delete()
+      .eq('user_id', user.id)
+
+    if (deleteError) {
+      console.error('Failed to clear existing scores:', deleteError)
+      return NextResponse.json({ error: 'Failed to save score' }, { status: 500 })
+    }
+
     const { error: insertError } = await serviceClient.from('scores').insert({
       user_id: user.id,
       score: result.score,

@@ -113,7 +113,7 @@ Respond ONLY with valid JSON (no markdown, no code blocks) in exactly this shape
   try {
     const message = await anthropicClient.messages.create({
       model: ANTHROPIC_MODEL,
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
     })
 
